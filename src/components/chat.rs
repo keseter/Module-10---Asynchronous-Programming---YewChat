@@ -40,12 +40,14 @@ struct UserProfile {
 }
 
 pub struct Chat {
+    username: String,
     users: Vec<UserProfile>,
     chat_input: NodeRef,
     _producer: Box<dyn Bridge<EventBus>>,
     wss: WebsocketService,
     messages: Vec<MessageData>,
 }
+
 impl Component for Chat {
     type Message = Msg;
     type Properties = ();
@@ -73,6 +75,7 @@ impl Component for Chat {
         }
 
         Self {
+            username,
             users: vec![],
             messages: vec![],
             chat_input: NodeRef::default(),
@@ -95,31 +98,34 @@ impl Component for Chat {
                                 avatar: format!(
                                     "https://avatars.dicebear.com/api/adventurer-neutral/{}.svg",
                                     u
-                                )
-                                .into(),
+                                ),
                             })
                             .collect();
-                        return true;
+                        true
                     }
                     MsgTypes::Message => {
                         let message_data: MessageData =
                             serde_json::from_str(&msg.data.unwrap()).unwrap();
                         self.messages.push(message_data);
-                        return true;
+                        true
                     }
-                    _ => {
-                        return false;
-                    }
+                    _ => false,
                 }
             }
             Msg::SubmitMessage => {
                 let input = self.chat_input.cast::<HtmlInputElement>();
                 if let Some(input) = input {
+                    let value = input.value();
+                    if value.trim().is_empty() {
+                        return false;
+                    }
+
                     let message = WebSocketMessage {
                         message_type: MsgTypes::Message,
-                        data: Some(input.value()),
+                        data: Some(value),
                         data_array: None,
                     };
+
                     if let Err(e) = self
                         .wss
                         .tx
@@ -137,66 +143,144 @@ impl Component for Chat {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let submit = ctx.link().callback(|_| Msg::SubmitMessage);
+        let connected_count = self.users.len();
 
         html! {
-            <div class="flex w-screen">
-                <div class="flex-none w-56 h-screen bg-gray-100">
-                    <div class="text-xl p-3">{"Users"}</div>
-                    {
-                        self.users.clone().iter().map(|u| {
-                            html!{
-                                <div class="flex m-3 bg-white rounded-lg p-2">
-                                    <div>
-                                        <img class="w-12 h-12 rounded-full" src={u.avatar.clone()} alt="avatar"/>
-                                    </div>
-                                    <div class="flex-grow p-3">
-                                        <div class="flex text-xs justify-between">
-                                            <div>{u.name.clone()}</div>
-                                        </div>
-                                        <div class="text-xs text-gray-400">
-                                            {"Hi there!"}
-                                        </div>
-                                    </div>
-                                </div>
-                            }
-                        }).collect::<Html>()
-                    }
-                </div>
-                <div class="grow h-screen flex flex-col">
-                    <div class="w-full h-14 border-b-2 border-gray-300"><div class="text-xl p-3">{"💬 Chat!"}</div></div>
-                    <div class="w-full grow overflow-auto border-b-2 border-gray-300">
-                        {
-                            self.messages.iter().map(|m| {
-                                let user = self.users.iter().find(|u| u.name == m.from).unwrap();
-                                html!{
-                                    <div class="flex items-end w-3/6 bg-gray-100 m-8 rounded-tl-lg rounded-tr-lg rounded-br-lg ">
-                                        <img class="w-8 h-8 rounded-full m-3" src={user.avatar.clone()} alt="avatar"/>
-                                        <div class="p-3">
-                                            <div class="text-sm">
-                                                {m.from.clone()}
-                                            </div>
-                                            <div class="text-xs text-gray-500">
-                                                if m.message.ends_with(".gif") {
-                                                    <img class="mt-3" src={m.message.clone()}/>
-                                                } else {
-                                                    {m.message.clone()}
-                                                }
-                                            </div>
-                                        </div>
-                                    </div>
-                                }
-                            }).collect::<Html>()
-                        }
+            <div class="min-h-screen w-screen bg-slate-950 text-amber-50">
+                <div class="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 p-4 lg:flex-row lg:p-6">
+                    <aside class="flex-none rounded-[2rem] border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur lg:w-80">
+                        <div class="rounded-[1.5rem] bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.18),_transparent_35%),linear-gradient(135deg,_rgba(15,23,42,0.92),_rgba(30,41,59,0.95))] p-5">
+                            <div class="text-xs uppercase tracking-[0.35em] text-amber-300">{"Room Status"}</div>
+                            <div class="mt-2 text-3xl font-black">{"Campfire Lounge"}</div>
+                            <p class="mt-3 text-sm leading-7 text-slate-300">
+                                {"A creative Yew chat space for late-night ideas, memes, and surprisingly productive conversations."}
+                            </p>
+                            <div class="mt-5 rounded-2xl border border-amber-200/10 bg-slate-900/45 p-4">
+                                <div class="text-xs uppercase tracking-[0.25em] text-amber-300">{"You entered as"}</div>
+                                <div class="mt-2 text-xl font-bold text-amber-50">{self.username.clone()}</div>
+                                <div class="mt-3 text-sm text-slate-300">{format!("{} active listener(s) in the lounge.", connected_count)}</div>
+                            </div>
+                        </div>
 
-                    </div>
-                    <div class="w-full h-14 flex px-3 items-center">
-                        <input ref={self.chat_input.clone()} type="text" placeholder="Message" class="block w-full py-2 pl-4 mx-3 bg-gray-100 rounded-full outline-none focus:text-gray-700" name="message" required=true />
-                        <button onclick={submit} class="p-3 shadow-sm bg-blue-600 w-10 h-10 rounded-full flex justify-center items-center color-white">
-                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" class="fill-white">
-                                <path d="M0 0h24v24H0z" fill="none"></path><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
-                            </svg>
-                        </button>
-                    </div>
+                        <div class="px-1 pt-5">
+                            <div class="flex items-center justify-between px-2">
+                                <div class="text-lg font-bold">{"Currently online"}</div>
+                                <div class="rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                                    {connected_count}
+                                </div>
+                            </div>
+                            {
+                                self.users.clone().iter().map(|u| {
+                                    html! {
+                                        <div class="mt-3 flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+                                            <img class="h-12 w-12 rounded-full" src={u.avatar.clone()} alt="avatar"/>
+                                            <div class="flex-grow">
+                                                <div class="flex items-center justify-between text-sm">
+                                                    <div class="font-semibold">{u.name.clone()}</div>
+                                                    <div class="h-2.5 w-2.5 rounded-full bg-emerald-400"></div>
+                                                </div>
+                                                <div class="mt-1 text-xs text-slate-400">
+                                                    {"Ready to share a spark."}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                }).collect::<Html>()
+                            }
+                        </div>
+                    </aside>
+
+                    <section class="flex min-h-[75vh] grow flex-col rounded-[2rem] border border-white/10 bg-white/5 shadow-xl backdrop-blur">
+                        <div class="border-b border-white/10 px-6 py-5">
+                            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                <div>
+                                    <div class="text-xs uppercase tracking-[0.35em] text-sky-300">{"Live conversation"}</div>
+                                    <div class="mt-2 text-3xl font-black">{"The Signal Board"}</div>
+                                </div>
+                                <div class="rounded-2xl border border-sky-200/10 bg-slate-900/50 px-4 py-3 text-sm leading-7 text-slate-300">
+                                    {"Share a thought, a study note, or even a GIF link. The room updates in real time."}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grow overflow-auto px-4 py-5 lg:px-6">
+                            {
+                                if self.messages.is_empty() {
+                                    html! {
+                                        <div class="flex h-full min-h-[18rem] items-center justify-center">
+                                            <div class="max-w-md rounded-[2rem] border border-dashed border-amber-200/20 bg-slate-900/40 p-8 text-center">
+                                                <div class="text-5xl">{"🪵"}</div>
+                                                <h2 class="mt-4 text-2xl font-bold">{"The fire is warm, but the room is quiet."}</h2>
+                                                <p class="mt-3 text-sm leading-7 text-slate-300">
+                                                    {"Be the first to post something. A greeting, a thought, or a GIF is enough to get the conversation moving."}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    }
+                                } else {
+                                    html! {
+                                        <>
+                                            {
+                                                self.messages.iter().map(|m| {
+                                                    let avatar = self
+                                                        .users
+                                                        .iter()
+                                                        .find(|u| u.name == m.from)
+                                                        .map(|u| u.avatar.clone())
+                                                        .unwrap_or_else(|| {
+                                                            "https://avatars.dicebear.com/api/adventurer-neutral/guest.svg".into()
+                                                        });
+                                                    let is_current_user = m.from == self.username;
+                                                    let bubble_classes = if is_current_user {
+                                                        "ml-auto border border-amber-200/20 bg-amber-300/15"
+                                                    } else {
+                                                        "mr-auto border border-white/10 bg-slate-900/65"
+                                                    };
+
+                                                    html! {
+                                                        <div class={classes!("mb-4", "flex", "max-w-3xl", "items-end", "gap-3", "rounded-[1.75rem]", "p-4", bubble_classes)}>
+                                                            <img class="h-10 w-10 rounded-full border border-white/10 bg-white" src={avatar} alt="avatar"/>
+                                                            <div class="min-w-0">
+                                                                <div class="text-sm font-semibold">
+                                                                    {m.from.clone()}
+                                                                </div>
+                                                                <div class="mt-2 break-words text-sm leading-7 text-slate-200">
+                                                                    if m.message.ends_with(".gif") {
+                                                                        <img class="mt-2 max-h-72 rounded-2xl" src={m.message.clone()}/>
+                                                                    } else {
+                                                                        {m.message.clone()}
+                                                                    }
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                }).collect::<Html>()
+                                            }
+                                        </>
+                                    }
+                                }
+                            }
+                        </div>
+
+                        <div class="border-t border-white/10 px-4 py-4 lg:px-6">
+                            <div class="flex items-center gap-3 rounded-[2rem] border border-white/10 bg-slate-900/55 p-3">
+                                <input
+                                    ref={self.chat_input.clone()}
+                                    type="text"
+                                    placeholder="Drop a thought into the lounge..."
+                                    class="block w-full bg-transparent px-3 py-3 text-slate-100 outline-none placeholder:text-slate-500"
+                                    name="message"
+                                    required=true
+                                />
+                                <button onclick={submit} class="flex h-12 w-12 items-center justify-center rounded-full bg-sky-400 shadow-sm transition hover:bg-sky-300">
+                                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" class="fill-white">
+                                        <path d="M0 0h24v24H0z" fill="none"></path>
+                                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </section>
                 </div>
             </div>
         }

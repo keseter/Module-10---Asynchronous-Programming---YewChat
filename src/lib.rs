@@ -13,6 +13,7 @@ use yew_router::prelude::*;
 
 use components::chat::Chat;
 use components::login::Login;
+use components::welcome::Welcome;
 
 // When the `wee_alloc` feature is enabled, this uses `wee_alloc` as the global
 // allocator.
@@ -25,6 +26,8 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 #[derive(Debug, Clone, Copy, PartialEq, Routable)]
 pub enum Route {
     #[at("/")]
+    Welcome,
+    #[at("/login")]
     Login,
     #[at("/chat")]
     Chat,
@@ -61,9 +64,26 @@ fn main() -> Html {
 
 fn switch(selected_route: &Route) -> Html {
     match selected_route {
+        Route::Welcome => html! {<Welcome />},
         Route::Login => html! {<Login />},
         Route::Chat => html! {<Chat/>},
-        Route::NotFound => html! {<h1>{"404 baby"}</h1>},
+        Route::NotFound => html! {
+            <div class="min-h-screen w-screen bg-slate-950 text-amber-50 flex items-center justify-center px-6">
+                <div class="max-w-xl text-center space-y-4">
+                    <div class="text-xs uppercase tracking-[0.4em] text-amber-300">{"Signal Lost"}</div>
+                    <h1 class="text-5xl font-black">{"404"}</h1>
+                    <p class="text-slate-300">
+                        {"That page drifted out of the lounge. Head back and rejoin the conversation."}
+                    </p>
+                    <Link<Route>
+                        to={Route::Welcome}
+                        classes="inline-flex items-center rounded-full bg-amber-300 px-6 py-3 font-semibold text-slate-950 transition hover:bg-amber-200"
+                    >
+                        {"Return To Base"}
+                    </Link<Route>>
+                </div>
+            </div>
+        },
     }
 }
 
