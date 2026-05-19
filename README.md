@@ -57,3 +57,50 @@ Creative additions:
 2. In this `YewChat` folder, run `npm.cmd run build:web`.
 3. Move into `webpkg` and run `python -m http.server 8000`.
 4. Open `http://localhost:8000`.
+
+## Bonus: Rust Websocket Server for YewChat
+
+For the bonus task, I replaced the JavaScript websocket server from Tutorial 3 with the Rust broadcast server from Tutorial 2 and modified it so it could understand the Yew chat protocol.
+
+### What I changed
+
+The original Rust server only broadcasted plain text messages such as:
+
+`From client 127.0.0.1: hello`
+
+That format worked for the console chat in Tutorial 2, but it could not work with the Yew web client in Tutorial 3 because the Yew client expects structured JSON messages.
+
+To make the Rust server compatible with YewChat, I changed it so that:
+
+- it accepts incoming JSON text messages from the browser
+- it handles a `register` message when a user joins
+- it stores connected usernames in shared server state
+- it broadcasts the full connected user list as a `users` message
+- it broadcasts chat messages back in the same JSON format used by the original JavaScript server
+
+### Why this works
+
+The important idea is that WebSocket communication is still text-based here. The JSON messages are simply text strings that are serialized on send and deserialized on receive.
+
+The Yew client sends messages like:
+
+- `register`
+- `message`
+
+The Rust server now reads those JSON strings, interprets the message type, and sends back JSON strings in the exact shape expected by the frontend. Because the protocol now matches the JavaScript version, the Yew web client can use the Rust server without changing its client-side logic.
+
+### Why this is a successful change
+
+This is a successful change because:
+
+- the Rust server now supports the same browser client workflow as the JavaScript server
+- usernames are tracked on the server
+- connected users are broadcast to all clients
+- chat messages are forwarded in the JSON format expected by the Yew frontend
+- the frontend does not need to change its WebSocket protocol to use the Rust backend
+
+### My opinion
+
+I prefer the Rust version for learning and for long-term backend development. Rust gives stronger type safety, better concurrency guarantees, and makes the message protocol more explicit in code. That is especially useful when the server starts becoming more complex.
+
+At the same time, the JavaScript version is shorter and easier to prototype quickly. For a very small demo, JavaScript is faster to write. But for reliability, maintainability, and confidence in the code, I prefer the Rust version.
